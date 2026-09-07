@@ -1,4 +1,4 @@
-# 🐍 PyPack
+![PyPack](img/pypack.png)
 
 [![Lisans: GPL v3](https://img.shields.io/badge/Lisans-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![Rust ile yazıldı](https://img.shields.io/badge/Rust%20ile%20yazıldı-Rust-orange.svg)](https://www.rust-lang.org/)
