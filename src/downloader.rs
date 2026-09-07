@@ -23,7 +23,7 @@ pub fn cache_dir() -> PathBuf {
 fn fetch_release(release_tag: &str) -> Result<serde_json::Value, String> {
     let releases_cache = cache_dir().join("releases");
     fs::create_dir_all(&releases_cache)
-        .map_err(|e| format!("Release cache dizini oluşturulamadı: {}", e))?;
+        .map_err(|e| format!("Couldn't create release cache: {}", e))?;
 
     let cache_path = releases_cache.join(format!("{}.json", release_tag));
 
@@ -46,7 +46,7 @@ fn fetch_release(release_tag: &str) -> Result<serde_json::Value, String> {
     let client = reqwest::blocking::Client::builder()
         .timeout(Duration::from_secs(30))
         .build()
-        .map_err(|e| format!("HTTP client hatası: {}", e))?;
+        .map_err(|e| format!("HTTP client error: {}", e))?;
 
     // GitHub API, User-Agent olmadan isteği reddeder
     let response = client
@@ -54,12 +54,12 @@ fn fetch_release(release_tag: &str) -> Result<serde_json::Value, String> {
         .header("User-Agent", "pypack")
         .header("Accept", "application/vnd.github+json")
         .send()
-        .map_err(|e| format!("GitHub API isteği başarısız: {}", e))?;
+        .map_err(|e| format!("GitHub API request failed: {}", e))?;
 
     if !response.status().is_success() {
         return Err(format!(
-            "GitHub API hatası: HTTP {} — tag: {}\n(API rate limit aşılmış olabilir; \
-             ~/.cache/pypack/releases/ altını temizleyip sonra tekrar deneyin)",
+            "GitHub API error: HTTP {} — tag: {}\n(API rate limit might be exceeded; \
+             clean ~/.cache/pypack/releases/ and retry few minutes later.)",
             response.status(),
             release_tag
         ));
@@ -67,7 +67,7 @@ fn fetch_release(release_tag: &str) -> Result<serde_json::Value, String> {
 
     let release: serde_json::Value = response
         .json()
-        .map_err(|e| format!("GitHub API yanıtı parse edilemedi: {}", e))?;
+        .map_err(|e| format!("GitHub API response couldn't be parsed: {}", e))?;
 
     // Cache'e yaz
     if let Ok(serialized) = serde_json::to_string_pretty(&release) {
@@ -105,7 +105,7 @@ fn find_asset(
 
     let assets = release["assets"]
         .as_array()
-        .ok_or("Release asset listesi okunamadı")?;
+        .ok_or("Couldn't read release asset list")?;
 
     for asset in assets {
         let name = match asset["name"].as_str() {
@@ -138,7 +138,7 @@ fn find_asset(
 
         let url = asset["browser_download_url"]
             .as_str()
-            .ok_or("Asset download URL'si okunamadı")?
+            .ok_or("Couldn't read asset download URL")?
             .to_string();
 
         return Ok((url, name.to_string()));
@@ -158,13 +158,13 @@ fn find_asset(
 
     if available.is_empty() {
         Err(format!(
-            "Python {} bu release'de (tag: {}) bulunmuyor.\nSürüm listesi için: \
+            "Python {} does not exist on this release (tag: {}).\nFor version list: \
              https://github.com/{}/releases/tag/{}",
             python_version, release_tag, GITHUB_REPO, release_tag
         ))
     } else {
         Err(format!(
-            "Hedef {} için asset bulunamadı. Bu Python sürümünde mevcut asset'ler:\n  {}",
+            "Couldn't find any asset for {} target. Available assets on this Python version:\n  {}",
             target,
             available.join("\n  ")
         ))
@@ -175,7 +175,7 @@ fn find_asset(
 pub fn download_python(target: &Target, python_version: &str) -> Result<PathBuf, String> {
     let cache = cache_dir();
     fs::create_dir_all(&cache)
-        .map_err(|e| format!("Cache dizini oluşturulamadı: {}", e))?;
+        .map_err(|e| format!("Couldn't create cache directory: {}", e))?;
 
     let release = fetch_release(RELEASE_TAG)?;
     let (url, asset_name) = find_asset(&release, target, python_version, RELEASE_TAG)?;
@@ -185,36 +185,36 @@ pub fn download_python(target: &Target, python_version: &str) -> Result<PathBuf,
     let archive_path = cache.join(&asset_name);
 
     if archive_path.exists() {
-        println!("  ✓ Cache'den kullanılıyor: {}", asset_name);
+        println!("  ✓ Using from cache: {}", asset_name);
         return Ok(archive_path);
     }
 
-    println!("  ↓ İndiriliyor: {}", url);
+    println!("  ↓ Downloading: {}", url);
 
     let client = reqwest::blocking::Client::builder()
         .timeout(Duration::from_secs(600))
         .build()
-        .map_err(|e| format!("HTTP client hatası: {}", e))?;
+        .map_err(|e| format!("HTTP client error: {}", e))?;
 
     let response = client
         .get(&url)
         .header("User-Agent", "pypack")
         .send()
-        .map_err(|e| format!("İndirme hatası: {}", e))?;
+        .map_err(|e| format!("Download error: {}", e))?;
 
     if !response.status().is_success() {
-        return Err(format!("İndirme başarısız: HTTP {}", response.status()));
+        return Err(format!("Download failed: HTTP {}", response.status()));
     }
 
     let bytes = response
         .bytes()
-        .map_err(|e| format!("İçerik okunamadı: {}", e))?;
+        .map_err(|e| format!("Couldn't read contents: {}", e))?;
 
     fs::write(&archive_path, &bytes)
-        .map_err(|e| format!("Dosya yazılamadı: {}", e))?;
+        .map_err(|e| format!("Couldn't write the file: {}", e))?;
 
     println!(
-        "  ✓ İndirildi: {} ({} MB)",
+        "  ✓ Downloaded: {} ({} MB)",
         asset_name,
         bytes.len() / (1024 * 1024)
     );
@@ -225,7 +225,7 @@ pub fn download_python(target: &Target, python_version: &str) -> Result<PathBuf,
 /// Arşivi belirtilen dizine açar
 pub fn extract_archive(archive_path: &Path, output_dir: &Path) -> Result<(), String> {
     fs::create_dir_all(output_dir)
-        .map_err(|e| format!("Çıktı dizini oluşturulamadı: {}", e))?;
+        .map_err(|e| format!("Couldn't create output directory: {}", e))?;
 
     let ext = archive_path
         .extension()
@@ -235,45 +235,45 @@ pub fn extract_archive(archive_path: &Path, output_dir: &Path) -> Result<(), Str
     match ext {
         "zip" => extract_zip(archive_path, output_dir),
         "gz" => extract_tar_gz(archive_path, output_dir),
-        _ => Err(format!("Desteklenmeyen arşiv formatı: {}", ext)),
+        _ => Err(format!("Unsupported archive format: {}", ext)),
     }
 }
 
 /// ZIP dosyası açar
 fn extract_zip(archive_path: &Path, output_dir: &Path) -> Result<(), String> {
     let file = fs::File::open(archive_path)
-        .map_err(|e| format!("ZIP açılamadı: {}", e))?;
+        .map_err(|e| format!("Couldn't open ZIP archive: {}", e))?;
 
     let mut archive = zip::ZipArchive::new(file)
-        .map_err(|e| format!("ZIP okunamadı: {}", e))?;
+        .map_err(|e| format!("Couldn't read ZIP archive: {}", e))?;
 
     for i in 0..archive.len() {
         let mut file = archive
             .by_index(i)
-            .map_err(|e| format!("ZIP entry okunamadı: {}", e))?;
+            .map_err(|e| format!("Couldn't read ZIP entry: {}", e))?;
 
         let name = file.name().to_string();
         let output_path = output_dir.join(&name);
 
         if file.is_dir() {
             fs::create_dir_all(&output_path)
-                .map_err(|e| format!("Dizin oluşturulamadı {}: {}", name, e))?;
+                .map_err(|e| format!("Couldn't create directory {}: {}", name, e))?;
         } else {
             if let Some(parent) = output_path.parent() {
                 fs::create_dir_all(parent)
-                    .map_err(|e| format!("Dizin oluşturulamadı: {}", e))?;
+                    .map_err(|e| format!("Couldn't create directory: {}", e))?;
             }
 
             let mut output_file = fs::File::create(&output_path)
-                .map_err(|e| format!("Dosya oluşturulamadı {}: {}", name, e))?;
+                .map_err(|e| format!("Couldn't create file {}: {}", name, e))?;
 
             let mut buffer = Vec::new();
             file.read_to_end(&mut buffer)
-                .map_err(|e| format!("Dosya okunamadı: {}", e))?;
+                .map_err(|e| format!("Couldn't read file: {}", e))?;
 
             output_file
                 .write_all(&buffer)
-                .map_err(|e| format!("Dosya yazılamadı: {}", e))?;
+                .map_err(|e| format!("Couldn't write file: {}", e))?;
         }
     }
 
@@ -290,7 +290,7 @@ fn extract_tar_gz(archive_path: &Path, output_dir: &Path) -> Result<(), String> 
 
     archive
         .unpack(output_dir)
-        .map_err(|e| format!("TAR.GZ açma hatası: {}", e))?;
+        .map_err(|e| format!("TAR.GZ unarchiving error: {}", e))?;
 
     Ok(())
 }
@@ -308,7 +308,7 @@ pub fn download_packages(
     }
 
     fs::create_dir_all(output_dir)
-        .map_err(|e| format!("Paket dizini oluşturulamadı: {}", e))?;
+        .map_err(|e| format!("Couldn't create package directory: {}", e))?;
 
     let platform_str = match target.triplet().as_str() {
         "x86_64-unknown-linux-gnu" => "manylinux2014_x86_64",
@@ -317,7 +317,7 @@ pub fn download_packages(
         "aarch64-apple-darwin" => "macosx_11_0_arm64",
         "x86_64-pc-windows-msvc" => "win_amd64",
         "aarch64-pc-windows-msvc" => "win_arm64",
-        t => return Err(format!("Bilinmeyen platform: {}", t)),
+        t => return Err(format!("Unknown platform: {}", t)),
     };
 
     // pip "3.11" formatını kabul eder; "3.11.7" gibi tam sürümü kırpalım
@@ -327,7 +327,7 @@ pub fn download_packages(
         .collect::<Vec<_>>()
         .join(".");
 
-    println!("  ↓ Paketler indiriliyor: {:?}", packages);
+    println!("  ↓ Downloading packages: {:?}", packages);
     println!("    Platform: {}, Python: {}", platform_str, major_minor);
 
     let mut cmd = std::process::Command::new(python);
@@ -350,13 +350,13 @@ pub fn download_packages(
 
     let output = cmd
         .output()
-        .map_err(|e| format!("pip download çalıştırılamadı: {}", e))?;
+        .map_err(|e| format!("Couldn't run `pip download`: {}", e))?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("pip download başarısız: {}", stderr));
+        return Err(format!("`pip download` failed: {}", stderr));
     }
 
-    println!("  ✓ Paketler indirildi");
+    println!("  ✓ Packages have been downloaded!");
     Ok(())
 }
