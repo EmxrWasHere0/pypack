@@ -1,0 +1,21 @@
+[package]
+name = "pypack"
+version = "0.1.0"
+edition = "2021"
+description = "Bundle Python code with runtime into cross-platform executables"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+reqwest = { version = "0.12", features = ["blocking", "json", "rustls-tls"] }
+zip = "2.1"
+tar = "0.4"
+flate2 = "1.0"
+walkdir = "2.5"
+sha2 = "0.10"
+hex = "0.4"
+dirs = "5.0"
+tempfile = "3.10"
+glob = "0.3"
+which = "6.0"
