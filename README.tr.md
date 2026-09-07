@@ -78,7 +78,7 @@ scriptiniz.py ──► PyPack ──► dist/app_linux-x86_64/
 **Kaynaktan derleme:**
 
 ```bash
-git clone https://github.com/KULLANICI_ADIN/pypack.git
+git clone https://github.com/EmxrWasHere0/pypack.git
 cd pypack
 cargo build --release
 # Çalıştırılabilir dosya: target/release/pypack
