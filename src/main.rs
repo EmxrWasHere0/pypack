@@ -55,6 +55,10 @@ struct Args {
     /// Packaging for all supported platforms
     #[arg(long)]
     all_platforms: bool,
+
+    /// Skip native executable generation (only script launcher)
+    #[arg(long)]
+    no_native: bool,
 }
 
 fn main() {
@@ -133,6 +137,7 @@ fn main() {
         targets,
         python_version: args.python_version.clone(),
         clean: !args.no_clean,
+        try_native: !args.no_native,
     };
 
     // Paketleme

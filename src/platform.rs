@@ -91,6 +91,53 @@ impl Target {
             (OperatingSystem::Windows, Architecture::Aarch64) => "aarch64-pc-windows-msvc".to_string(),
         }
     }
+    pub fn host() -> Option<Target> {
+        let os = match std::env::consts::OS {
+            "linux" => OperatingSystem::Linux,
+            "macos" => OperatingSystem::Macos,
+            "windows" => OperatingSystem::Windows,
+            _ => return None,
+        };
+        let arch = match std::env::consts::ARCH {
+            "x86_64" => Architecture::X86_64,
+            "aarch64" => Architecture::Aarch64,
+            _ => return None,
+        };
+        Some(Target { os, arch })
+    }
+
+    pub fn is_host(&self) -> bool {
+        Target::host().map(|h| h == *self).unwrap_or(false)
+    }
+
+    /// Cross-compile'da kullanılacak Rust triplet'i.
+    /// None → pratik cross toolchain yok (ör. linux→windows-aarch64)
+    pub fn rust_cross_triplet(&self) -> Option<&'static str> {
+        match (self.os, self.arch) {
+            (OperatingSystem::Windows, Architecture::X86_64) => Some("x86_64-pc-windows-gnu"),
+            (OperatingSystem::Windows, Architecture::Aarch64) => None,
+            (OperatingSystem::Linux, Architecture::X86_64) => Some("x86_64-unknown-linux-gnu"),
+            (OperatingSystem::Linux, Architecture::Aarch64) => Some("aarch64-unknown-linux-gnu"),
+            (OperatingSystem::Macos, Architecture::X86_64) => Some("x86_64-apple-darwin"),
+            (OperatingSystem::Macos, Architecture::Aarch64) => Some("aarch64-apple-darwin"),
+        }
+    }
+
+    /// Hedef OS'e göre çalıştırılabilir dosya adı: app.exe / app
+    pub fn exe_file_name(&self, app_name: &str) -> String {
+        match self.os {
+            OperatingSystem::Windows => format!("{}.exe", app_name),
+            _ => app_name.to_string(),
+        }
+    }
+
+    /// Hedef OS'e göre binary adı (launcher build cache'i için)
+    pub fn bin_file_name(&self, name: &str) -> String {
+        match self.os {
+            OperatingSystem::Windows => format!("{}.exe", name),
+            _ => name.to_string(),
+        }
+    }
 }
 
 impl fmt::Display for Target {

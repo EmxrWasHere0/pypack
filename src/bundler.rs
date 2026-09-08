@@ -13,6 +13,7 @@ pub struct BundleConfig {
     pub targets: Vec<Target>,
     pub python_version: String,
     pub clean: bool,
+    pub try_native: bool,
 }
 
 pub struct BundleResult {
@@ -142,17 +143,31 @@ fn bundle_for_target(
     }
 
     // 4. Launcher oluştur
-    println!("  [4/5] Creating Launcher...");
+        // 4. Launcher: native (öncelik) + script (fallback) + manifest
+    println!("  [4/5] Launcher oluşturuluyor...");
+    if config.try_native {
+        match launcher::install_native_launcher(&target_dir, target, &config.app_name) {
+            Ok(p) => println!(
+                "    ✓ Native launcher: {}",
+                p.file_name().unwrap_or_default().to_string_lossy()
+            ),
+            Err(e) => {
+                println!("    ⚠ Native launcher yok: {}", e);
+                println!("    → Script launcher fallback kullanılacak");
+            }
+        }
+    }
+
+    // Script launcher'lar her zaman üretilir (fallback garantisi)
     launcher::create_launcher(&target_dir, target, &config.app_name, script_name)?;
 
-    // Rust launcher kaynak kodu da kaydet
-    let launcher_src_dir = target_dir.join("launcher_src");
-    fs::create_dir_all(&launcher_src_dir)
-        .map_err(|e| format!("Couldn't create the launcher source directory: {}", e))?;
-
-    let rust_source = launcher::generate_rust_launcher_source(&config.app_name, script_name);
-    fs::write(launcher_src_dir.join("main.rs"), rust_source)
-        .map_err(|e| format!("Couldn't save Rust Launcher: {}", e))?;
+    // Native launcher'ın okuduğu bundle manifest'i
+    let manifest = format!(
+        "# pypack bundle manifest\nname={}\nentry=app/{}\npython_home=python\nchdir=true\n",
+        config.app_name, script_name
+    );
+    fs::write(target_dir.join("pypack.manifest"), manifest)
+        .map_err(|e| format!("manifest yazılamadı: {}", e))?;
 
     // README oluştur
     launcher::create_readme(&target_dir, &config.app_name, target)?;

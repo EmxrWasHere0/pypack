@@ -1,8 +1,207 @@
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
-use std::path::Path;
-
+use std::path::{Path, PathBuf};
 use crate::platform::{OperatingSystem, Target};
+use std::env;
+use std::process::Command;
+
+/// Launcher'ın Rust kaynağı — derleme zamanında binary'ye gömülür.
+/// Böylece pypack `cargo install` ile kurulmuş olsa bile kaynak eldedir.
+pub const LAUNCHER_SRC: &str = include_str!("launcher_main.rs");
+
+/// Kaynağın hash'i — launcher build cache'inin anahtarı
+fn launcher_src_hash() -> String {
+    use sha2::{Digest, Sha256};
+    let mut h = Sha256::new();
+    h.update(LAUNCHER_SRC.as_bytes());
+    hex::encode(h.finalize())[..12].to_string()
+}
+
+/// Native launcher'ı hedef için derler (cache'li).
+/// Host hedefiyse --target'sız, cross ise --target <triple> ile derlenir.
+pub fn build_native_launcher(target: &Target) -> Result<PathBuf, String> {
+    let hash = launcher_src_hash();
+    let cache_root = crate::downloader::cache_dir();
+
+    let cache_bin = cache_root
+        .join("launchers")
+        .join(format!("{}-{}", target.triplet(), hash))
+        .join(target.bin_file_name("pypack-launcher"));
+    if cache_bin.exists() {
+        println!("    ✓ Launcher cache'den: {}", cache_bin.display());
+        return Ok(cache_bin);
+    }
+
+    ensure_cargo()?;
+
+    // Geçici Cargo projesi (kaynak binary'ye gömülü — pypack'in kurulum
+    // dizinine bağımlılık yok)
+    let proj_dir = cache_root
+        .join("launcher-build")
+        .join(format!("{}-{}", target.triplet(), hash));
+    write_cargo_project(&proj_dir)?;
+
+    let triple: Option<&str> = if target.is_host() {
+        None // default toolchain — host'ta her zaman çalışır
+    } else {
+        let t = target.rust_cross_triplet().ok_or_else(|| {
+            format!(
+                "{} hedefi bu makineden cross-compile edilemiyor. \
+                 Script launcher fallback kullanılacak.",
+                target
+            )
+        })?;
+        ensure_target_installed(t)?;
+        Some(t)
+    };
+
+    println!(
+        "    ⚙ Rust launcher derleniyor ({})...",
+        if triple.is_some() { "cross" } else { "host" }
+    );
+    run_cargo_build(&proj_dir, triple)?;
+
+    let built = match triple {
+        Some(t) => proj_dir.join("target").join(t).join("release"),
+        None => proj_dir.join("target").join("release"),
+    }
+    .join(target.bin_file_name("pypack-launcher"));
+
+    if !built.exists() {
+        return Err(format!("derlenen launcher bulunamadı: {}", built.display()));
+    }
+
+    if let Some(parent) = cache_bin.parent() {
+        fs::create_dir_all(parent).map_err(|e| format!("cache dizini: {}", e))?;
+    }
+    fs::copy(&built, &cache_bin).map_err(|e| format!("launcher cache'lenemedi: {}", e))?;
+    Ok(cache_bin)
+}
+
+/// Derlenmiş launcher'ı bundle'a kurar: dist/app veya dist/app.exe
+pub fn install_native_launcher(
+    bundle_dir: &Path,
+    target: &Target,
+    app_name: &str,
+) -> Result<PathBuf, String> {
+    let src = build_native_launcher(target)?;
+    let dest = bundle_dir.join(target.exe_file_name(app_name));
+    fs::copy(&src, &dest).map_err(|e| format!("launcher kopyalanamadı: {}", e))?;
+    make_executable(&dest);
+    Ok(dest)
+}
+
+fn write_cargo_project(dir: &Path) -> Result<(), String> {
+    let src_dir = dir.join("src");
+    fs::create_dir_all(&src_dir).map_err(|e| format!("proje dizini: {}", e))?;
+
+    fs::write(
+        dir.join("Cargo.toml"),
+        r#"[package]
+name = "pypack-launcher"
+version = "0.1.0"
+edition = "2021"
+
+[profile.release]
+opt-level = "z"
+lto = true
+strip = true
+panic = "abort"
+codegen-units = 1
+"#,
+    )
+    .map_err(|e| format!("Cargo.toml yazılamadı: {}", e))?;
+
+    fs::write(src_dir.join("main.rs"), LAUNCHER_SRC)
+        .map_err(|e| format!("launcher kaynağı yazılamadı: {}", e))?;
+    Ok(())
+}
+
+fn ensure_cargo() -> Result<(), String> {
+    let cargo = env::var("CARGO").unwrap_or_else(|_| "cargo".to_string());
+    match Command::new(&cargo).arg("--version").output() {
+        Ok(o) if o.status.success() => Ok(()),
+        Ok(_) => Err("cargo çalışmıyor".to_string()),
+        Err(_) => Err(
+            "cargo bulunamadı. Native launcher için Rust toolchain gerekir; \
+             yoksa script launcher'lar kullanılır."
+                .to_string(),
+        ),
+    }
+}
+
+fn ensure_target_installed(triple: &str) -> Result<(), String> {
+    let installed = Command::new("rustup")
+        .args(["target", "list", "--installed"])
+        .output()
+        .map(|o| {
+            o.status.success()
+                && String::from_utf8_lossy(&o.stdout)
+                    .lines()
+                    .any(|l| l.trim() == triple)
+        })
+        .unwrap_or(false);
+
+    if installed {
+        return Ok(());
+    }
+
+    // Otomatik kurmayı dene (rustup varsa)
+    let ok = Command::new("rustup")
+        .args(["target", "add", triple])
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false);
+
+    if ok {
+        Ok(())
+    } else {
+        Err(format!(
+            "Rust hedefi '{}' hazır değil. Elle kurun: rustup target add {}",
+            triple, triple
+        ))
+    }
+}
+
+fn run_cargo_build(dir: &Path, triple: Option<&str>) -> Result<(), String> {
+    let cargo = env::var("CARGO").unwrap_or_else(|_| "cargo".to_string());
+    let mut cmd = Command::new(&cargo);
+    cmd.current_dir(dir).args(["build", "--release"]);
+    if let Some(t) = triple {
+        cmd.args(["--target", t]);
+    }
+
+    let output = cmd
+        .output()
+        .map_err(|e| format!("cargo çalıştırılamadı: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let hint = if stderr.contains("linker") {
+            "\nİpucu: cross-compile için sistem linker'ı gerekli \
+             (Linux→Windows: 'sudo apt install mingw-w64', \
+             Linux→linux-arm64: 'sudo apt install gcc-aarch64-linux-gnu')."
+        } else {
+            ""
+        };
+        return Err(format!("cargo build başarısız:{}\n{}", hint, stderr));
+    }
+    Ok(())
+}
+
+fn make_executable(path: &Path) {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if let Ok(meta) = fs::metadata(path) {
+            let mut perms = meta.permissions();
+            perms.set_mode(0o755);
+            let _ = fs::set_permissions(path, perms);
+        }
+    }
+    #[cfg(not(unix))]
+    let _ = path;
+}
 
 /// Linux/macOS için launcher script oluşturur
 pub fn create_unix_launcher(output_dir: &Path, app_name: &str, script_name: &str) -> Result<(), String> {
@@ -37,7 +236,7 @@ exec "$PYTHON_BIN" "$SCRIPT_DIR/app/{script_name}" "$@"
         script_name = script_name,
     );
 
-    let launcher_path = output_dir.join(app_name);
+    let launcher_path = output_dir.join(format!("{}.sh", app_name));
     fs::write(&launcher_path, launcher_content)
         .map_err(|e| format!("Couldn't create the launcher: {}", e))?;
 
@@ -107,68 +306,6 @@ $env:PYTHONDONTWRITEBYTECODE = "1"
     Ok(())
 }
 
-/// Rust tabanlı binary launcher kaynak kodu oluşturur
-pub fn generate_rust_launcher_source(app_name: &str, script_name: &str) -> String {
-    format!(
-        r#"// Auto-generated launcher for {app_name}
-// This file is generated by pypack
-
-use std::path::PathBuf;
-use std::process::Command;
-
-fn main() {{
-    let exe_dir = std::env::current_exe()
-        .ok()
-        .and_then(|p| p.parent().map(|p| p.to_path_buf()))
-        .unwrap_or_else(|| PathBuf::from("."));
-
-    #[cfg(target_os = "windows")]
-    let python_bin = exe_dir.join("python").join("python.exe");
-
-    #[cfg(not(target_os = "windows"))]
-    let python_bin = exe_dir.join("python").join("bin").join("python3");
-
-    #[cfg(target_os = "windows")]
-    let script_path = exe_dir.join("app").join("{script_name}");
-
-    #[cfg(not(target_os = "windows"))]
-    let script_path = exe_dir.join("app").join("{script_name}");
-
-    #[cfg(target_os = "linux")]
-    {{
-        let lib_dir = exe_dir.join("python").join("lib");
-        if let Some(lib_str) = lib_dir.to_str() {{
-            let ld_path = std::env::var("LD_LIBRARY_PATH").unwrap_or_default();
-            std::env::set_var("LD_LIBRARY_PATH", format!("{{}}:{{}}", lib_str, ld_path));
-        }}
-    }}
-
-    let python_home = exe_dir.join("python");
-    std::env::set_var("PYTHONHOME", &python_home);
-
-    let mut cmd = Command::new(&python_bin);
-    cmd.arg(&script_path);
-
-    let args: Vec<String> = std::env::args().skip(1).collect();
-    for arg in args {{
-        cmd.arg(arg);
-    }}
-
-    match cmd.status() {{
-        Ok(status) => std::process::exit(status.code().unwrap_or(1)),
-        Err(e) => {{
-            eprintln!("Uygulama başlatılamadı: {{}}", e);
-            eprintln!("Python binary: {{}}", python_bin.display());
-            eprintln!("Script: {{}}", script_path.display());
-            std::process::exit(1);
-        }}
-    }}
-}}
-"#,
-        app_name = app_name,
-        script_name = script_name,
-    )
-}
 
 /// Launcher'ı hedef platform için oluşturur
 pub fn create_launcher(
@@ -201,19 +338,13 @@ needed to make {app_name} run independently.
 
 ## Usage
 
-### Linux / macOS
-```bash
-./{app_name}
-```
+### Native (recommended)
+Linux/macOS:  ./demoapp
+Windows:      demoapp.exe
 
-### Windows
-```bat
-{app_name}.bat
-```
-
-### PowerShell
-```powershell
-.\{app_name}.ps1
+### Script fallback
+Linux/macOS:  ./demoapp.sh
+Windows:      demoapp.bat  (or demoapp.ps1)
 ```
 Directory Tree
 

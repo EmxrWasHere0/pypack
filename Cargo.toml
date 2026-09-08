@@ -19,3 +19,14 @@ dirs = "5.0"
 tempfile = "3.10"
 glob = "0.3"
 which = "6.0"
+
+[[bin]]
+name = "pypack"
+path = "src/main.rs"
+
+[[bin]]
+name = "pypack-launcher"
+path = "src/launcher_main.rs"
+
+[dev-dependencies]
+tempfile = "3.10"
