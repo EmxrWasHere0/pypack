@@ -28,7 +28,7 @@ pub fn build_native_launcher(target: &Target) -> Result<PathBuf, String> {
         .join(format!("{}-{}", target.triplet(), hash))
         .join(target.bin_file_name("pypack-launcher"));
     if cache_bin.exists() {
-        println!("    ✓ Launcher cache'den: {}", cache_bin.display());
+        println!("    ✓ Launcher from cache: {}", cache_bin.display());
         return Ok(cache_bin);
     }
 
@@ -46,8 +46,8 @@ pub fn build_native_launcher(target: &Target) -> Result<PathBuf, String> {
     } else {
         let t = target.rust_cross_triplet().ok_or_else(|| {
             format!(
-                "{} hedefi bu makineden cross-compile edilemiyor. \
-                 Script launcher fallback kullanılacak.",
+                "Target {} couldn't compiled in this machine. \
+                 Script launcher fallback will be used.",
                 target
             )
         })?;
@@ -56,7 +56,7 @@ pub fn build_native_launcher(target: &Target) -> Result<PathBuf, String> {
     };
 
     println!(
-        "    ⚙ Rust launcher derleniyor ({})...",
+        "    ⚙ Compiling Rust launcher ({})...",
         if triple.is_some() { "cross" } else { "host" }
     );
     run_cargo_build(&proj_dir, triple)?;
@@ -68,13 +68,13 @@ pub fn build_native_launcher(target: &Target) -> Result<PathBuf, String> {
     .join(target.bin_file_name("pypack-launcher"));
 
     if !built.exists() {
-        return Err(format!("derlenen launcher bulunamadı: {}", built.display()));
+        return Err(format!("couldn't find compiled launcher: {}", built.display()));
     }
 
     if let Some(parent) = cache_bin.parent() {
-        fs::create_dir_all(parent).map_err(|e| format!("cache dizini: {}", e))?;
+        fs::create_dir_all(parent).map_err(|e| format!("cache directory: {}", e))?;
     }
-    fs::copy(&built, &cache_bin).map_err(|e| format!("launcher cache'lenemedi: {}", e))?;
+    fs::copy(&built, &cache_bin).map_err(|e| format!("couldn't cache launcher: {}", e))?;
     Ok(cache_bin)
 }
 
@@ -86,14 +86,14 @@ pub fn install_native_launcher(
 ) -> Result<PathBuf, String> {
     let src = build_native_launcher(target)?;
     let dest = bundle_dir.join(target.exe_file_name(app_name));
-    fs::copy(&src, &dest).map_err(|e| format!("launcher kopyalanamadı: {}", e))?;
+    fs::copy(&src, &dest).map_err(|e| format!("couldn't copy launcher: {}", e))?;
     make_executable(&dest);
     Ok(dest)
 }
 
 fn write_cargo_project(dir: &Path) -> Result<(), String> {
     let src_dir = dir.join("src");
-    fs::create_dir_all(&src_dir).map_err(|e| format!("proje dizini: {}", e))?;
+    fs::create_dir_all(&src_dir).map_err(|e| format!("project directory: {}", e))?;
 
     fs::write(
         dir.join("Cargo.toml"),
@@ -110,10 +110,10 @@ panic = "abort"
 codegen-units = 1
 "#,
     )
-    .map_err(|e| format!("Cargo.toml yazılamadı: {}", e))?;
+    .map_err(|e| format!("couldn't write Cargo.toml: {}", e))?;
 
     fs::write(src_dir.join("main.rs"), LAUNCHER_SRC)
-        .map_err(|e| format!("launcher kaynağı yazılamadı: {}", e))?;
+        .map_err(|e| format!("couldn't write launcher source: {}", e))?;
     Ok(())
 }
 
@@ -121,7 +121,7 @@ fn ensure_cargo() -> Result<(), String> {
     let cargo = env::var("CARGO").unwrap_or_else(|_| "cargo".to_string());
     match Command::new(&cargo).arg("--version").output() {
         Ok(o) if o.status.success() => Ok(()),
-        Ok(_) => Err("cargo çalışmıyor".to_string()),
+        Ok(_) => Err("cargo is not working".to_string()),
         Err(_) => Err(
             "cargo bulunamadı. Native launcher için Rust toolchain gerekir; \
              yoksa script launcher'lar kullanılır."
@@ -157,7 +157,7 @@ fn ensure_target_installed(triple: &str) -> Result<(), String> {
         Ok(())
     } else {
         Err(format!(
-            "Rust hedefi '{}' hazır değil. Elle kurun: rustup target add {}",
+            "Rust target '{}' is not ready. Set it up manually: rustup target add {}",
             triple, triple
         ))
     }
@@ -178,13 +178,13 @@ fn run_cargo_build(dir: &Path, triple: Option<&str>) -> Result<(), String> {
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         let hint = if stderr.contains("linker") {
-            "\nİpucu: cross-compile için sistem linker'ı gerekli \
+            "\nTip: System linker is required for cross-compile \
              (Linux→Windows: 'sudo apt install mingw-w64', \
              Linux→linux-arm64: 'sudo apt install gcc-aarch64-linux-gnu')."
         } else {
             ""
         };
-        return Err(format!("cargo build başarısız:{}\n{}", hint, stderr));
+        return Err(format!("cargo build failed:{}\n{}", hint, stderr));
     }
     Ok(())
 }

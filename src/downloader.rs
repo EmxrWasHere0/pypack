@@ -36,7 +36,7 @@ fn fetch_release(release_tag: &str) -> Result<serde_json::Value, String> {
         }
     }
 
-    println!("  ↓ Release bilgileri alınıyor: {} ({})", release_tag, GITHUB_REPO);
+    println!("  ↓ Getting Release info: {} ({})", release_tag, GITHUB_REPO);
 
     let api_url = format!(
         "https://api.github.com/repos/{}/releases/tags/{}",
@@ -283,7 +283,7 @@ fn extract_zip(archive_path: &Path, output_dir: &Path) -> Result<(), String> {
 /// tar.gz dosyası açar
 fn extract_tar_gz(archive_path: &Path, output_dir: &Path) -> Result<(), String> {
     let file = fs::File::open(archive_path)
-        .map_err(|e| format!("TAR.GZ açılamadı: {}", e))?;
+        .map_err(|e| format!("Couldn't open TAR.GZ archive: {}", e))?;
 
     let gz_decoder = flate2::read::GzDecoder::new(file);
     let mut archive = tar::Archive::new(gz_decoder);

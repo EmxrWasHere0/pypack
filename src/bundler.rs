@@ -70,10 +70,10 @@ fn bundle_for_target(
     let temp_dir = config.output_dir.join(format!(".tmp_{}", target));
     if temp_dir.exists() {
         fs::remove_dir_all(&temp_dir)
-            .map_err(|e| format!("Temp dizin silinemedi: {}", e))?;
+            .map_err(|e| format!("Couldn't delete temp directory: {}", e))?;
     }
     fs::create_dir_all(&temp_dir)
-        .map_err(|e| format!("Temp dizin oluşturulamadı: {}", e))?;
+        .map_err(|e| format!("Couldn't create temp directory: {}", e))?;
 
     downloader::extract_archive(&archive_path, &temp_dir)?;
 
@@ -144,7 +144,7 @@ fn bundle_for_target(
 
     // 4. Launcher oluştur
         // 4. Launcher: native (öncelik) + script (fallback) + manifest
-    println!("  [4/5] Launcher oluşturuluyor...");
+    println!("  [4/5] Creating Launcher...");
     if config.try_native {
         match launcher::install_native_launcher(&target_dir, target, &config.app_name) {
             Ok(p) => println!(
@@ -152,8 +152,8 @@ fn bundle_for_target(
                 p.file_name().unwrap_or_default().to_string_lossy()
             ),
             Err(e) => {
-                println!("    ⚠ Native launcher yok: {}", e);
-                println!("    → Script launcher fallback kullanılacak");
+                println!("    ⚠ No native launcher found: {}", e);
+                println!("    → Fallback to: Script launcher");
             }
         }
     }
@@ -167,7 +167,7 @@ fn bundle_for_target(
         config.app_name, script_name
     );
     fs::write(target_dir.join("pypack.manifest"), manifest)
-        .map_err(|e| format!("manifest yazılamadı: {}", e))?;
+        .map_err(|e| format!("couldn't write manifest: {}", e))?;
 
     // README oluştur
     launcher::create_readme(&target_dir, &config.app_name, target)?;

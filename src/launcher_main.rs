@@ -26,7 +26,7 @@ fn run() -> Result<(), String> {
     let exe_dir = env::current_exe()
         .ok()
         .and_then(|p| p.parent().map(Path::to_path_buf))
-        .ok_or("launcher konumu belirlenemedi")?;
+        .ok_or("no launcher command assigned")?;
 
     // 2) Manifest'i oku
     let manifest = read_manifest(&exe_dir.join(MANIFEST_FILE))?;
@@ -34,7 +34,7 @@ fn run() -> Result<(), String> {
     let entry = manifest
         .get("entry")
         .cloned()
-        .ok_or("manifest'te 'entry' eksik")?;
+        .ok_or("entry is missing in manifest")?;
     let python_home = manifest
         .get("python_home")
         .cloned()
@@ -49,7 +49,7 @@ fn run() -> Result<(), String> {
     // 3) Entry point ve Python runtime'ı doğrula
     let entry_path = exe_dir.join(&entry);
     if !entry_path.is_file() {
-        return Err(format!("giriş noktası bulunamadı: {}", entry_path.display()));
+        return Err(format!("couldn't find an entry point: {}", entry_path.display()));
     }
 
     let home = exe_dir.join(python_home);
@@ -91,7 +91,7 @@ fn run() -> Result<(), String> {
     //    (manifest'ten chdir=false ile kapatılabilir)
     if chdir {
         env::set_current_dir(&exe_dir)
-            .map_err(|e| format!("çalışma dizini değiştirilemedi: {}", e))?;
+            .map_err(|e| format!("couldn't change the working directory: {}", e))?;
     }
 
     // 6) Python'u başlat, argümanları ve exit code'u ilet
@@ -103,7 +103,7 @@ fn run() -> Result<(), String> {
 
     let status = cmd.status().map_err(|e| {
         format!(
-            "Python başlatılamadı: {}\n  binary: {}\n  script: {}",
+            "Couldn't start Python: {}\n  binary: {}\n  script: {}",
             e,
             python_bin.display(),
             entry_path.display()
@@ -146,7 +146,7 @@ fn find_python_bin(home: &Path) -> Result<PathBuf, String> {
         }
     }
     Err(format!(
-        "Python runtime bulunamadı: {} altında python binary yok",
+        "Couldn't find a Python runtime: {} altında python binary yok",
         home.display()
     ))
 }
@@ -191,7 +191,7 @@ fn prepend_library_path(var: &str, dirs: &[PathBuf]) {
 /// Basit key=value manifest parser (# yorum ve boş satır toleranslı)
 fn read_manifest(path: &Path) -> Result<BTreeMap<String, String>, String> {
     let content = fs::read_to_string(path)
-        .map_err(|e| format!("manifest okunamadı ({}): {}", path.display(), e))?;
+        .map_err(|e| format!("couldn't read manifest ({}): {}", path.display(), e))?;
 
     let mut map = BTreeMap::new();
     for line in content.lines() {
@@ -216,7 +216,7 @@ mod tests {
         let p = dir.path().join("m");
         std::fs::write(
             &p,
-            "# yorum\n\nentry=app/main.py\npython_home = python\nchdir=false\n",
+            "# comment\n\nentry=app/main.py\npython_home = python\nchdir=false\n",
         )
         .unwrap();
         let m = read_manifest(&p).unwrap();
