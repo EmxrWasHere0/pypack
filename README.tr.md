@@ -139,7 +139,7 @@ pypack uygulamam.py --all-platforms
 dist/
 └── myapp_platform-arch/
     ├── myapp              # Unix başlatıcı
-    ├── myapp              # Unix başlatıcı (Script Fallback)
+    ├── myapp.sh           # Unix başlatıcı (Script Fallback)
     ├── myapp.bat          # Windows başlatıcı (Script Fallback)
     ├── myapp.ps1          # PowerShell başlatıcı (Script Fallback)
     ├── myapp.exe          # Windows başlatıcı

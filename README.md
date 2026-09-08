@@ -140,7 +140,7 @@ pypack myapp.py --all-platforms
 dist/
 └── myapp_platform-arch/
     ├── myapp              # Unix launcher
-    ├── myapp              # Unix launcher (Script Fallback)
+    ├── myapp.sh           # Unix launcher (Script Fallback)
     ├── myapp.bat          # Windows launcher (Script Fallback)
     ├── myapp.ps1          # PowerShell launcher (Script Fallback)
     ├── myapp.exe          # Windows launcher
