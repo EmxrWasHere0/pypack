@@ -1,6 +1,6 @@
 [package]
 name = "pypack"
-version = "0.1.0"
+version = "0.1.2"
 edition = "2021"
 description = "Bundle Python code with runtime into cross-platform executables"
 
