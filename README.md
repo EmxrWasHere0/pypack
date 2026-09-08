@@ -136,20 +136,22 @@ pypack myapp.py --all-platforms
 ---
 
 ## 📂 Output Structure
-
 ```
 dist/
-└── myapp_linux-x86_64/
-    ├── myapp              # Unix launcher (executable)
-    ├── myapp.bat          # Windows launcher
-    ├── myapp.ps1          # PowerShell launcher
+└── myapp_platform-arch/
+    ├── myapp              # Unix launcher
+    ├── myapp              # Unix launcher (Script Fallback)
+    ├── myapp.bat          # Windows launcher (Script Fallback)
+    ├── myapp.ps1          # PowerShell launcher (Script Fallback)
+    ├── myapp.exe          # Windows launcher
     ├── python/            # Standalone Python runtime
-    ├── app/               # Your application code
+    ├── app/               # Your app code
     │   └── myapp.py
     ├── lib/               # Bundled dependencies
-    ├── launcher_src/      # Optional Rust launcher source
+    ├── launcher_src/      # Optional Rust launcher code
     │   └── main.rs
-    └── README.md          # Per-bundle usage notes
+    ├── README.md          # Per-bundle usage notes
+    └── pypack.manifest    # Metadata for native builds
 ```
 
 **Running a bundle:**

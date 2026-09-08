@@ -339,15 +339,17 @@ needed to make {app_name} run independently.
 ## Usage
 
 ### Native (recommended)
+```
 Linux/macOS:  ./demoapp
 Windows:      demoapp.exe
 
 ### Script fallback
+```
 Linux/macOS:  ./demoapp.sh
 Windows:      demoapp.bat  (or demoapp.ps1)
 ```
 Directory Tree
-
+```
 {app_name}/
 ├── {app_name}          # Linux/macOS launcher
 ├── {app_name}.bat      # Windows launcher
@@ -361,7 +363,7 @@ Directory Tree
 ├── lib/                # Extra libraries
 └── launcher_src/       # Rust launcher source code
     └── main.rs
-
+```
 System requirements
 
     {target} compatible operating system

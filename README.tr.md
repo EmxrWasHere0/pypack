@@ -135,20 +135,22 @@ pypack uygulamam.py --all-platforms
 ---
 
 ## 📂 Çıktı Yapısı
-
 ```
 dist/
-└── uygulamam_linux-x86_64/
-    ├── uygulamam          # Unix başlatıcı (çalıştırılabilir)
-    ├── uygulamam.bat      # Windows başlatıcı
-    ├── uygulamam.ps1      # PowerShell başlatıcı
-    ├── python/            # Bağımsız Python runtime
+└── myapp_platform-arch/
+    ├── myapp              # Unix başlatıcı
+    ├── myapp              # Unix başlatıcı (Script Fallback)
+    ├── myapp.bat          # Windows başlatıcı (Script Fallback)
+    ├── myapp.ps1          # PowerShell başlatıcı (Script Fallback)
+    ├── myapp.exe          # Windows başlatıcı
+    ├── python/            # Standalone Python runtime
     ├── app/               # Uygulama kodunuz
-    │   └── uygulamam.py
-    ├── lib/               # Paketlenen bağımlılıklar
-    ├── launcher_src/      # İsteğe bağlı Rust başlatıcı kaynağı
+    │   └── myapp.py
+    ├── lib/               # Paketlenmiş gereksinimler
+    ├── launcher_src/      # Opsiyonel Rust çalıştırıcı kodu
     │   └── main.rs
-    └── README.md          # Pakete özel kullanım notları
+    ├── README.md          # Paket başı kullanım notları
+    └── pypack.manifest    # Native build'ler için metadata
 ```
 
 **Paketi çalıştırma:**
